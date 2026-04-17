@@ -157,4 +157,4 @@ uv run jupyter lab
 
 ## Related
 
-- Demo application: [craft-poc](https://github.com/baechul/craft-poc)
+- Demo application: [craft-poc](https://github.com/baechul/craft-poc) to demonstrate how the model out of this project can be integrated into the backend service.
