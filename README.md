@@ -17,6 +17,61 @@ This repository is the model development component of the [craft-poc](https://gi
 | [`notebooks/rawdata-cleaning.ipynb`](notebooks/rawdata-cleaning.ipynb) | Loads `Online Sales Data.csv`, cleans and validates the data, and exports `sales.csv`   |
 | [`notebooks/train-model.ipynb`](notebooks/train-model.ipynb)           | Builds the feature table, trains LightGBM and XGBoost models, and evaluates predictions |
 
+## Prediction Algorithm
+
+The model forecasts `total_revenue` per `(date, product_category)` using **gradient boosting regression**.
+
+### Input Features
+
+| Feature            | Type        | Description                         |
+| ------------------ | ----------- | ----------------------------------- |
+| `category_encoded` | categorical | Label-encoded product category      |
+| `year`             | temporal    | Calendar year                       |
+| `month`            | temporal    | Month of year (1–12)                |
+| `week`             | temporal    | ISO week number (1–53)              |
+| `day_of_week`      | temporal    | Day of week (0=Monday, 6=Sunday)    |
+| `revenue_lag_1`    | lag         | Revenue 1 day prior (same category) |
+| `revenue_lag_7`    | lag         | Revenue 7 days prior                |
+| `revenue_lag_14`   | lag         | Revenue 14 days prior               |
+| `revenue_lag_30`   | lag         | Revenue 30 days prior               |
+
+**Temporal Features** - To have the model learn the time-based seasonal patterns:
+- Example: April tends to have higher/lower revenue than January.
+
+**Lag Features** - To have the model learn what happens before:
+- Example: If sale was high 7 days ago, it's likely to be high today too.
+
+**Exogenous Features**
+In this demo, I didn't add exogenous features but in a real world product, sales could be correlated with the 
+interest rates, consumer index or regional holidays.
+
+### Target
+
+`total_revenue` — sum of revenue for a given category on a given date.
+
+### Models Evaluated
+
+| Model                          | Notes                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------- |
+| **LightGBM** (`LGBMRegressor`) | In general — faster training, better accuracy on this dataset           |
+| **XGBoost** (`XGBRegressor`)   | Compared baseline — `n_estimators=200`, `learning_rate=0.05`, `max_depth=4` |
+
+Both models are trained with an 80/20 chronological train/test split (sorted by date to prevent data leakage) and evaluated using **MAE** and **RMSE**.
+
+### Training Pipeline
+
+```
+Raw CSV
+  └─► Data Cleaning (rawdata-cleaning.ipynb)
+        └─► sales.csv
+              └─► Feature Engineering (train-model.ipynb)
+                    ├─► Encode categories (LabelEncoder)
+                    ├─► Add temporal features
+                    ├─► Add lag features → drop NaN rows
+                    └─► Train/Test Split (80/20, chronological)
+                          └─► Model Training & Evaluation (with various model hyperparameters)
+```
+
 ## Tech Stack
 
 - **Python** 3.14
