@@ -1,143 +1,91 @@
 # craft-poc-model
 
-A collection of Jupyter notebooks demonstrating an end-to-end ML pipeline for sales revenue forecasting — from raw data cleaning through feature engineering to model training and evaluation.
+A set of Jupyter notebooks for sales-model experimentation, from raw-data cleaning to feature engineering, model training, evaluation, and artifact export.
 
 ## Overview
 
-This repository is the model development component of the [craft-poc](https://github.com/baechul/craft-poc) application. It covers:
+This repository is the model-development side of [craft-poc](https://github.com/baechul/craft-poc). It currently includes:
 
-- **Data cleaning & preprocessing** — Standardizing columns, handling missing values, deduplication, and type coercion
-- **Feature engineering** — Temporal features (year, month, week, day of week) and lag features (1, 7, 14, 30-day revenue lags) aggregated at the `(date, product_category)` level
-- **Model training & evaluation** — Comparing LightGBM and XGBoost regressors using MAE and RMSE metrics
+- Data cleaning and preprocessing from raw CSV input
+- Two forecasting model tracks:
+  - Category-level revenue prediction (`total_revenue`)
+  - Product-level demand prediction (`units_sold`)
+- Gradient-boosting model comparison (LightGBM vs XGBoost)
+- Saved model artifacts for downstream inference
 
 ## Notebooks
 
-| Notebook                                                                       | Description                                                                             |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| [`notebooks/rawdata-cleaning.ipynb`](notebooks/rawdata-cleaning.ipynb)         | Loads `Online Sales Data.csv`, cleans and validates the data, and exports `sales.csv`   |
-| [`notebooks/category-sales-model.ipynb`](notebooks/category-sales-model.ipynb) | Builds the feature table, trains LightGBM and XGBoost models, and evaluates predictions |
+| Notebook                                                                     | Description                                                             |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [notebooks/rawdata-cleaning.ipynb](notebooks/rawdata-cleaning.ipynb)         | Cleans and validates source sales data, then outputs `sales.csv`.       |
+| [notebooks/category-sales-model.ipynb](notebooks/category-sales-model.ipynb) | Builds category-level time-series features and trains revenue models.   |
+| [notebooks/product-sales-model.ipynb](notebooks/product-sales-model.ipynb)   | Builds product-level time-series features and trains unit-sales models. |
 
-## Prediction Algorithm
+## Modeling Approach
 
-The model forecasts `total_revenue` per `(date, product_category)` using **gradient boosting regression**.
+Both model notebooks follow the same structure:
 
-### Input Features
+1. Aggregate transactional records to a daily forecasting grain.
+2. Encode categorical identifiers using `LabelEncoder`.
+3. Build temporal features (`year`, `month`, `week`, `day_of_week`).
+4. Build lag features (1, 7, 14, 30 days).
+5. Split chronologically (`80%` train, `20%` test).
+6. Train and compare `LGBMRegressor` and `XGBRegressor`.
+7. Evaluate and print metrics.
 
-| Feature            | Type        | Description                         |
-| ------------------ | ----------- | ----------------------------------- |
-| `category_encoded` | categorical | Label-encoded product category      |
-| `year`             | temporal    | Calendar year                       |
-| `month`            | temporal    | Month of year (1–12)                |
-| `week`             | temporal    | ISO week number (1–53)              |
-| `day_of_week`      | temporal    | Day of week (0=Monday, 6=Sunday)    |
-| `revenue_lag_1`    | lag         | Revenue 1 day prior (same category) |
-| `revenue_lag_7`    | lag         | Revenue 7 days prior                |
-| `revenue_lag_14`   | lag         | Revenue 14 days prior               |
-| `revenue_lag_30`   | lag         | Revenue 30 days prior               |
+## Evaluation Metrics
 
-**Temporal Features** - To have the model learn the time-based seasonal patterns:
+The notebooks report:
 
-- Example: April tends to have higher/lower revenue than January.
+- `MAE` (Mean Absolute Error)
+- `RMSE` (Root Mean Squared Error)
+- `R2` (coefficient of determination)
 
-**Lag Features** - To have the model learn what happens before:
+Notes:
 
-- Example: If sale was high 7 days ago, it's likely to be high today too.
+- MAE and RMSE are in target units (`total_revenue` or `units_sold`).
+- R2 is unitless and indicates explained variance relative to a mean baseline.
 
-**Exogenous Features**
-In this demo, I didn't add exogenous features but in a real world product, sales could be correlated with the
-interest rates, consumer index or regional holidays.
+## Features by Model
 
-### Target
+### Category Model (`notebooks/category-sales-model.ipynb`)
 
-`total_revenue` — sum of revenue for a given category on a given date.
+Target: `total_revenue` per `(date, product_category)`
 
-### Models Evaluated
+Core features:
 
-| Model                          | Notes                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------- |
-| **LightGBM** (`LGBMRegressor`) | In general — faster training, better accuracy on this dataset               |
-| **XGBoost** (`XGBRegressor`)   | Compared baseline — `n_estimators=200`, `learning_rate=0.05`, `max_depth=4` |
+- `category_encoded`
+- `year`, `month`, `week`, `day_of_week`
+- `revenue_lag_1`, `revenue_lag_7`, `revenue_lag_14`, `revenue_lag_30`
 
-Both models are trained with an 80/20 chronological train/test split (sorted by date to prevent data leakage) and evaluated using **MAE** and **RMSE**.
+### Product Model (`notebooks/product-sales-model.ipynb`)
 
-### Training Pipeline
+Target: `units_sold` per `(date, product_category, product_name)`
 
-```
-Raw CSV
-  └─► Data Cleaning (rawdata-cleaning.ipynb)
-        └─► sales.csv
-              └─► Feature Engineering (category-sales-model.ipynb)
-                    ├─► Encode categories (LabelEncoder)
-                    ├─► Add temporal features
-                    ├─► Add lag features → drop NaN rows
-                    └─► Train/Test Split (80/20, chronological)
-                          └─► Model Training & Evaluation (with various model hyperparameters)
-```
+Core features:
 
-## Sales Prediction Calculation Algorithm
+- `category_encoded`, `product_encoded`
+- `year`, `month`, `week`, `day_of_week`
+- `units_lag_1`, `units_lag_7`, `units_lag_14`, `units_lag_30`
 
-The prediction pipeline implemented in [app/tools/predict_sales.py](app/tools/predict_sales.py) runs through the following stages:
+## Saved Artifacts
 
-### 1. Data Ingestion
+Current notebook outputs include:
 
-Historical sales data is read from `app/models/sales.csv`, loading only the three columns required for inference (`date`, `product_category`, `total_revenue`) to minimise memory usage.
+- `notebooks/models/top_sales_prediction_lgb.joblib`
+- `notebooks/models/top_sales_prediction_xgb.joblib`
+- `notebooks/models/top_products_prediction_lgb.joblib`
 
-### 2. Aggregation
-
-Daily revenue is summed per product category to produce a clean category-date time series, sorted chronologically within each category.
-
-### 3. Feature Engineering
-
-The following features are derived to match what the model was trained on:
-
-| Feature                 | Description                                           |
-| ----------------------- | ----------------------------------------------------- |
-| `year`, `month`, `week` | Calendar components extracted from the date           |
-| `day_of_week`           | Day index (0 = Monday, 6 = Sunday)                    |
-| `category_encoded`      | Numeric label encoding of the product category string |
-| `revenue_lag_1`         | Revenue 1 day prior                                   |
-| `revenue_lag_7`         | Revenue 7 days prior                                  |
-| `revenue_lag_14`        | Revenue 14 days prior                                 |
-| `revenue_lag_30`        | Revenue 30 days prior                                 |
-
-Rows with any missing lag values (caused by the shift operation at the start of the series) are dropped before forecasting begins.
-
-### 4. Iterative Multi-Step Forecasting
-
-For each product category the model performs a **rolling one-step-ahead forecast** over the requested horizon:
-
-$$\hat{y}_{t+1} = f\bigl(\text{category}, \text{calendar}_{t+1}, \hat{y}_t, \hat{y}_{t-6}, \hat{y}_{t-13}, \hat{y}_{t-29}\bigr)$$
-
-where $f$ is the trained LightGBM model. At each step:
-
-1. A feature row is constructed from the next calendar date and the lag window of the accumulated revenue history.
-   I selected four lag checkpoints (1, 7, 14, 30 days back) for the model to be trained on. For example,
-   revernue*lag_7 is used to measure the distance from the prediction target date (t+1) so (t+1)-7 looks back 7 days ago from (t+1).
-   (t+1)-7 = t-6 which is used in $\hat{y}*{t-6}$
-2. The model predicts the next day's revenue; negative predictions are clamped to `0.0`.
-3. The predicted value is appended to the rolling history so subsequent steps can reference it as a lag feature.
-
-The horizon length is determined by the requested timeframe:
-
-| Timeframe | Horizon (days) |
-| --------- | -------------- |
-| `week`    | 7 x k          |
-| `month`   | 30 x k         |
-| `year`    | 365 x k        |
-
-where k is `frame_k` (the number of timeframe units requested).
-
-### 5. Ranking & Output
-
-All per-day forecasts are aggregated by summing predicted revenue per category over the full horizon. The top `N` categories by total projected revenue are returned, ranked in descending order.
+Each artifact stores the trained model and required encoders/feature metadata used during training.
 
 ## Tech Stack
 
-- **Python** 3.14
-- **pandas**, **numpy** — Data manipulation
-- **scikit-learn** — Preprocessing (`LabelEncoder`) and evaluation metrics
-- **LightGBM**, **XGBoost** — Gradient boosting regressors
-- **uv** — Dependency and environment management
+- Python 3.14
+- pandas, numpy
+- scikit-learn (LabelEncoder + metrics)
+- LightGBM, XGBoost
+- joblib
+- uv
 
 ## Getting Started
 
@@ -148,7 +96,7 @@ uv sync
 uv run jupyter lab
 ```
 
-> `uv sync` installs all dependencies from the locked `uv.lock` file, ensuring a reproducible environment.
+`uv sync` installs dependencies from the lockfile for reproducible environments.
 
 ## App Screenshots
 
@@ -160,4 +108,4 @@ uv run jupyter lab
 
 ## Related
 
-- Demo application: [craft-poc](https://github.com/baechul/craft-poc) to demonstrate how the model out of this project can be integrated into the backend service.
+- Demo application: [craft-poc](https://github.com/baechul/craft-poc)
