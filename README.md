@@ -12,10 +12,10 @@ This repository is the model development component of the [craft-poc](https://gi
 
 ## Notebooks
 
-| Notebook                                                               | Description                                                                             |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [`notebooks/rawdata-cleaning.ipynb`](notebooks/rawdata-cleaning.ipynb) | Loads `Online Sales Data.csv`, cleans and validates the data, and exports `sales.csv`   |
-| [`notebooks/train-model.ipynb`](notebooks/train-model.ipynb)           | Builds the feature table, trains LightGBM and XGBoost models, and evaluates predictions |
+| Notebook                                                                       | Description                                                                             |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| [`notebooks/rawdata-cleaning.ipynb`](notebooks/rawdata-cleaning.ipynb)         | Loads `Online Sales Data.csv`, cleans and validates the data, and exports `sales.csv`   |
+| [`notebooks/category-sales-model.ipynb`](notebooks/category-sales-model.ipynb) | Builds the feature table, trains LightGBM and XGBoost models, and evaluates predictions |
 
 ## Prediction Algorithm
 
@@ -36,13 +36,15 @@ The model forecasts `total_revenue` per `(date, product_category)` using **gradi
 | `revenue_lag_30`   | lag         | Revenue 30 days prior               |
 
 **Temporal Features** - To have the model learn the time-based seasonal patterns:
+
 - Example: April tends to have higher/lower revenue than January.
 
 **Lag Features** - To have the model learn what happens before:
+
 - Example: If sale was high 7 days ago, it's likely to be high today too.
 
 **Exogenous Features**
-In this demo, I didn't add exogenous features but in a real world product, sales could be correlated with the 
+In this demo, I didn't add exogenous features but in a real world product, sales could be correlated with the
 interest rates, consumer index or regional holidays.
 
 ### Target
@@ -53,7 +55,7 @@ interest rates, consumer index or regional holidays.
 
 | Model                          | Notes                                                                       |
 | ------------------------------ | --------------------------------------------------------------------------- |
-| **LightGBM** (`LGBMRegressor`) | In general — faster training, better accuracy on this dataset           |
+| **LightGBM** (`LGBMRegressor`) | In general — faster training, better accuracy on this dataset               |
 | **XGBoost** (`XGBRegressor`)   | Compared baseline — `n_estimators=200`, `learning_rate=0.05`, `max_depth=4` |
 
 Both models are trained with an 80/20 chronological train/test split (sorted by date to prevent data leakage) and evaluated using **MAE** and **RMSE**.
@@ -64,13 +66,14 @@ Both models are trained with an 80/20 chronological train/test split (sorted by 
 Raw CSV
   └─► Data Cleaning (rawdata-cleaning.ipynb)
         └─► sales.csv
-              └─► Feature Engineering (train-model.ipynb)
+              └─► Feature Engineering (category-sales-model.ipynb)
                     ├─► Encode categories (LabelEncoder)
                     ├─► Add temporal features
                     ├─► Add lag features → drop NaN rows
                     └─► Train/Test Split (80/20, chronological)
                           └─► Model Training & Evaluation (with various model hyperparameters)
 ```
+
 ## Sales Prediction Calculation Algorithm
 
 The prediction pipeline implemented in [app/tools/predict_sales.py](app/tools/predict_sales.py) runs through the following stages:
@@ -108,9 +111,9 @@ $$\hat{y}_{t+1} = f\bigl(\text{category}, \text{calendar}_{t+1}, \hat{y}_t, \hat
 where $f$ is the trained LightGBM model. At each step:
 
 1. A feature row is constructed from the next calendar date and the lag window of the accumulated revenue history.
-I selected four lag checkpoints (1, 7, 14, 30 days back) for the model to be trained on. For example, 
-revernue_lag_7 is used to measure the distance from the prediction target date (t+1) so (t+1)-7 looks back 7 days ago from (t+1).
-(t+1)-7 = t-6 which is used in $\hat{y}_{t-6}$  
+   I selected four lag checkpoints (1, 7, 14, 30 days back) for the model to be trained on. For example,
+   revernue*lag_7 is used to measure the distance from the prediction target date (t+1) so (t+1)-7 looks back 7 days ago from (t+1).
+   (t+1)-7 = t-6 which is used in $\hat{y}*{t-6}$
 2. The model predicts the next day's revenue; negative predictions are clamped to `0.0`.
 3. The predicted value is appended to the rolling history so subsequent steps can reference it as a lag feature.
 
